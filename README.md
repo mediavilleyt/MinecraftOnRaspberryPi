@@ -87,3 +87,109 @@ U should be able to join the server by entering this into minecraft:
 ```
 [IP]:25565
 ```
+
+---
+# Extra
+If u wanna host the server online follow these steps.
+
+### Step 5
+Forward your ip adress and port using the instructions for your own router. once forwarded u need to find the public ip adress of your raspberry pi using:
+```
+curl -4 ifconfig.me
+```
+
+Once u have that u can go to your domain registar and go to your dns setting.
+Create a new A record with the name being your subdomain or `www` if u want to use your main domain.
+
+|Type|Name|IP4|ect...|
+|----|----|---|------|
+|A|subdmain|XXX.XXX.XXX.XXX (public ip4 adress)||
+
+If u are using cloudflare be sure to disable proxy and use dns only beceause otherwise it will not work.
+
+After that u are going to need a `SRV` record like this:
+
+|Type|Name|Priority|Weight|Port|Target|
+|----|----|--------|------|----|------|
+|SRV|_minecraft._tcp|0|0|25565 (default)|subdomain.domain.tld|
+
+### Example
+I'm using cloudflare so for me it is:
+|Type|Name|Priority|Weight|IPv4|Proxy Status|TTL|Port|Target|
+|----|----|--------|------|----|------------|---|----|------|
+|A|server|-|-|127.0.0.1 (your public adress here)|disabled|2 min (default)|-|-|
+|SRV|_minecraft._tcp|0 (default)|0 (default)|-|-|Auto (default)|25565 (default)|server.domain.com|
+
+### Step 6
+Auto start server when pi starts.
+
+First install screen:
+```
+sudo apt update
+sudo apt install screen
+```
+
+Than lets create the start script:
+```
+nano start.sh
+```
+
+And add following content:
+```sh
+#!/bin/bash
+cd /home/jonas
+# Start Minecraft server inside a detached screen session named "mc"
+exec screen -DmS mc bash -lc 'exec java -Xmx1024M -Xms1024M -jar server.jar nogui'
+```
+
+And make it executable:
+`chmod +x [path]/start.sh`
+
+Than create the screen service:
+`sudo nano /etc/systemd/system/minecraft.service`
+
+And add:
+```sh
+[Unit]
+Description=Minecraft Server (screen session)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=[username]
+Group=[username]
+WorkingDirectory=[path]
+
+Type=oneshot
+RemainAfterExit=yes
+
+# Clean up any stale "mc" screen (ignore errors if none exist)
+ExecStartPre=-/usr/bin/screen -S mc -X quit
+
+# Run the server using the start script
+ExecStart=[path]/start.sh
+
+# Stop cleanly by sending "stop<Enter>"
+ExecStop=/usr/bin/screen -S mc -p 0 -X stuff "stop$(printf \\r)"
+ExecStopPost=-/usr/bin/screen -S mc -X quit
+
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target
+```
+
+To enable and start the service add:
+```
+sudo systemctl daemon-reload
+sudo systemctl enable minecraft
+sudo systemctl start minecraft
+systemctl status minecraft --no-pager
+```
+
+Now when u boot the pi the server automatticly starts and whern u use SSH to enter your pi u can manage the server by using `screen -r mc`
+
+And to exit without shutting it down use `CTRL + A` and than press `d`.
+
+---
+And thats it now u should be good to go to make your own minecraft server on your raspberry pi!
